@@ -59,7 +59,13 @@ if ("Quantity.Ordered" %in% colnames(df) & "Price.Each" %in% colnames(df)) {
 } else {
   stop("Columns 'Quantity.Ordered' or 'Price.Each' not found in the dataset")
 }
+# Remove rows with missing or NA values in any column
+df <- df %>%
+  filter(complete.cases(.))  # Removes rows with NA
 
+# Optionally, drop empty strings as well
+df<- df %>%
+  filter_all(all_vars(. != ""))
 # Inspect the cleaned data
 head(df)
 
@@ -415,7 +421,24 @@ ggplot(sales_summary, aes(x = Month, y = Total_Sales, fill = time_frame)) +
 
 
 
+# Summarize total sales by time_frame
+time_frame_summary <- df %>%
+  group_by(time_frame) %>%
+  summarise(Total_Sales = sum(Total.Sales, na.rm = TRUE), .groups = 'drop')
 
+# Calculate the percentage of total sales for each time_frame
+time_frame_summary <- time_frame_summary %>%
+  mutate(Percentage = Total_Sales / sum(Total_Sales) * 100)
+
+# Create pie chart with percentage labels
+ggplot(time_frame_summary, aes(x = "", y = Total_Sales, fill = time_frame)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +  # Convert to pie chart
+  labs(title = "Total Sales Distribution by Time Frame") +
+  scale_fill_manual(values = c("Morning" = "red", "Evening" = "orange", "Night" = "green")) +
+  theme_void() +  # Remove axis labels and gridlines for pie chart aesthetics
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")),  # Add percentage labels
+            position = position_stack(vjust = 0.5))  # Position labels in the center of the slices
 
 
 
