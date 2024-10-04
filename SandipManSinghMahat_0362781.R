@@ -426,6 +426,104 @@ ggplot(sales_summary, aes(x = Month, y = Total_Sales, fill = time_frame)) +
 
 
 
+#Sales Trend Over Time
+library(ggplot2)
+
+# Plot total sales by month
+ggplot(monthly_summary_sorted, aes(x = Month, y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Total Sales by Month", x = "Month", y = "Total Sales") +
+  theme_minimal()
+
+
+
+
+
+
+
+# Summarise sales by product 
+all_products <- df %>%
+  group_by(Product) %>%
+  summarise(Total_Sales = sum(Total.Sales, na.rm = TRUE)) %>%
+  arrange(desc(Total_Sales))  # No head() function
+
+# Plot all products
+ggplot(all_products, aes(x = reorder(Product, -Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Total Sales by Product", x = "Product", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Create a bar plot comparing total sales by city to see which cities have the highest sales
+city_sales <- df %>%
+  group_by(City) %>%
+  summarise(Total_Sales = sum(Total.Sales, na.rm = TRUE)) %>%
+  arrange(desc(Total_Sales))
+
+ggplot(city_sales, aes(x = reorder(City, -Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Total Sales by City", x = "City", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+
+
+
+
+
+
+
+ 
+# Sales by Time Frame and State
+sales_by_time_state <- df %>%
+  group_by(State, time_frame) %>%
+  summarise(Total_Sales = sum(Total.Sales, na.rm = TRUE), .groups = 'drop')
+
+ggplot(sales_by_time_state, aes(x = State, y = Total_Sales, fill = time_frame)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Sales by Time Frame and State", x = "State", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ time_frame)
+
+
+
+
+#Customer Segmentation by Purchase
+customer_segmentation <- df %>%
+  group_by(Order.ID) %>%
+  summarise(Total_Sales = sum(Total.Sales), Average_Order_Size = mean(Quantity.Ordered), .groups = 'drop')
+
+ggplot(customer_segmentation, aes(x = Total_Sales, y = Average_Order_Size)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Customer Segmentation by Total Sales and Average Order Size", x = "Total Sales", y = "Average Order Size") +
+  theme_minimal()
+
+
+
+
+
+
+
+
 # Plot the cities on a leaflet map
 leaflet(geocoded_cities) %>%
   addTiles() %>%  # Add base map tiles
@@ -442,3 +540,10 @@ leaflet(geocoded_cities) %>%
     label = ~as.character(Frequency),  # Show customer count in label
     labelOptions = labelOptions(noHide = TRUE, textOnly = FALSE, direction = "auto")
   )
+
+
+
+
+
+
+
