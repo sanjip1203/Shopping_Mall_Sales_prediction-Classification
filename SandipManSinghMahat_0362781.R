@@ -272,6 +272,54 @@ head(df)
 
 
 
+
+
+
+# Load the necessary libraries
+library(leaflet)
+library(tidygeocoder)
+library(dplyr)
+
+
+# Ensure that your dataframe 'df' has City and State columns
+if (!all(c("City", "State") %in% colnames(df))) {
+  stop("Dataframe must contain 'City' and 'State' columns.")
+}
+
+# Count the number of customers in each city by state
+city_counts <- df %>%
+  group_by(State, City) %>%
+  summarise(Frequency = n(), .groups = 'drop')  # This will give you the number of customers per city by state
+
+# Create a new column combining City and State for geocoding
+city_counts <- city_counts %>%
+  mutate(Location = paste(City, State, sep = ", "))  # Create a Location column
+
+# Geocode the cities (using OpenStreetMap)
+geocoded_cities <- city_counts %>%
+  geocode(Location, method = 'osm', full_results = TRUE)  # Get full results for more details
+
+# Check if geocoding was successful and if 'long' and 'lat' are present
+if (!all(c("long", "lat") %in% colnames(geocoded_cities))) {
+  stop("Geocoding failed: Missing 'long' or 'lat' columns.")
+}
+
+# Combine geocoded data with frequency data
+geocoded_cities <- geocoded_cities %>%
+  select(long, lat, Location) %>%  # Select necessary columns
+  left_join(city_counts, by = c("Location" = "Location"))  # Join to bring in Frequency
+
+# Ensure the combined data has the necessary columns
+if (!"Frequency" %in% colnames(geocoded_cities)) {
+  stop("Frequency column not found after joining.")
+}
+
+head(geocoded_cities)
+
+
+
+
+
                                          #Data visualization
 
 
@@ -363,4 +411,34 @@ ggplot(sales_summary, aes(x = Month, y = Total_Sales, fill = time_frame)) +
   scale_fill_manual(values = c("Morning" = "lightblue", "Evening" = "orange", "Night" = "darkblue")) +
   theme_minimal()
 
-                      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Plot the cities on a leaflet map
+leaflet(geocoded_cities) %>%
+  addTiles() %>%  # Add base map tiles
+  addCircles(
+    lng = ~long, lat = ~lat, 
+    popup = ~paste(City, State, "<br>Customers: ", Frequency),  # Show frequency in popup
+    radius = 10000,  # Adjust circle size as needed
+    weight = 1,
+    color = ~ifelse(Frequency == 1, "green", ifelse(Frequency == 2, "orange", "red")),  # Direct color assignment based on frequency
+    fillOpacity = 0.5
+  ) %>%
+  addMarkers(
+    lng = ~long, lat = ~lat,
+    label = ~as.character(Frequency),  # Show customer count in label
+    labelOptions = labelOptions(noHide = TRUE, textOnly = FALSE, direction = "auto")
+  )
