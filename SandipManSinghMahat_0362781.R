@@ -226,15 +226,21 @@ df <- df %>%
     Street = trimws(Street),  
     City = trimws(City),  
     State = trimws(State),  
-    Zip.Code = trimws(Zip.Code)  
+    Zip.Code = trimws(Zip.Code)
   )
 
-# Create a new data frame with unique Order.IDs, their repetition count, and total sales
-order_id_df <- df %>%
+# Find repeated Order.IDs only
+repeated_orders <- df %>%
+  group_by(Order.ID) %>%
+  filter(n() > 1)  # Only keep Order.IDs that appear more than once
+
+# Create a new data frame with repeated Order.IDs, their products, and total sales
+order_id_df <- repeated_orders %>%
   group_by(Order.ID, Street, City, State, Zip.Code) %>%
   summarise(
-    Repeat_Count = n(),  # Count how many times each Order.ID appears
-    Total_Sales = sum(Total.Sales, na.rm = TRUE),  # Sum of Total Sales for each Order.ID
+    Products = paste(unique(Product), collapse = ", "),  # Concatenate product names into a single string
+    Repeat_Count = n(),  # Count how many times each repeated Order.ID appears
+    Total_Sales = sum(Total.Sales, na.rm = TRUE),  # Sum of Total Sales for each repeated Order.ID
     .groups = 'drop'  # Avoid warning about grouping
   ) %>%
   # Replace empty strings and NA values with "Not Available"
@@ -250,6 +256,70 @@ order_id_df <- df %>%
 
 # Display the new data frame 
 print(order_id_df)
+
+
+
+
+
+
+
+
+# Install and load required libraries
+
+library(arules)
+
+# Clean and trim whitespace from relevant columns
+df <- df %>%
+  mutate(
+    Order.ID = trimws(Order.ID),  # Trim whitespace
+    Product = trimws(Product)  # Trim Product names
+  )
+
+# Convert data into a transaction format
+transactions <- df %>%
+  group_by(Order.ID) %>%
+  summarise(Products = list(unique(Product))) %>%  # Group products by Order.ID
+  pull(Products)  # Extract the product lists as a vector
+
+# Convert the list of transactions into transactions class
+transactions <- as(transactions, "transactions")
+
+# Display summary of transactions
+summary(transactions)
+
+
+# Applying Apriori algorithm with lower support
+rules <- apriori(transactions, parameter = list(supp = 0.001, conf = 0.4))
+
+# Check if rules are generated
+if (length(rules) > 0) {
+  # Display top rules sorted by lift
+  inspect(sort(rules, by = "lift")[1:10])
+} else {
+  print("No rules found. Try lowering the support or confidence.")
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -568,5 +638,53 @@ leaflet(geocoded_cities) %>%
 
 
 
+
+
+
+
+# Load necessary libraries
+library(leaflet)
+library(tidygeocoder)
+library(dplyr)
+
+# Sample data for demonstration (replace this with your actual repeated_orders DataFrame)
+# Assuming repeated_orders DataFrame has Order.ID, City, and Total.Sales columns
+
+#  Aggregate sales data and count unique Order IDs by City
+city_sales_map <- repeated_orders %>%
+  group_by(City) %>%
+  summarise(
+    Total_Sales = sum(Total.Sales, na.rm = TRUE),
+    Order_Count = n_distinct(Order.ID),  # Count unique Order IDs
+    .groups = 'drop'
+  )
+
+#Geocode the City names to get latitude and longitude
+city_sales_map <- city_sales_map %>%
+  geocode(City, method = 'osm')
+
+# Check the updated data frame
+str(city_sales_map)  # Verify the structure to ensure lat/lon exist
+
+# Create a color palette for Total_Sales
+pal <- colorNumeric(palette = "Blues", domain = city_sales_map$Total_Sales)
+
+# Create the leaflet map
+leaflet(city_sales_map) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~long, lat = ~lat,  # Ensure these match your actual column names
+    radius = ~Order_Count * 2,  # Adjust radius based on number of orders
+    popup = ~paste("City:", City,
+                   "<br>Total Sales: $", Total_Sales,
+                   "<br>Number of Orders:", Order_Count),
+    color = ~pal(Total_Sales), fillOpacity = 0.7
+  ) %>%
+  addLegend("bottomright", 
+            title = "Total Sales by City", 
+            pal = pal, 
+            values = city_sales_map$Total_Sales,
+            labFormat = labelFormat(prefix = "$"), 
+            opacity = 1)
 
 
