@@ -185,21 +185,10 @@ df <- df %>%
   )
 
 
-# Create a new 'Week' column based on the 'Day' column
-df <- df %>%
-  mutate(
-    Week = case_when(
-      Day >= 0 & Day <= 7 ~ 1,
-      Day >= 8 & Day <= 14 ~ 2,
-      Day >= 15 & Day <= 21 ~ 3,
-      Day >= 22 & Day <= 28 ~ 4,
-      Day >= 29 & Day <= 35 ~ 5,
-      TRUE ~ NA_real_  # In case there's an invalid day value
-    )
-  )
 
-# Inspect the new 'Week' column
-head(df[, c("Day", "Week")], 10)
+
+
+
 
 
 # Count duplicate Order.ID values
@@ -450,19 +439,51 @@ ggplot(order_count_by_state, aes(x = reorder(State, -Total_Orders), y = Total_Or
 
 
 
-# Summarize Total Sales by Week
-weekly_sales <- df %>%
-  group_by(Week) %>%
-  summarise(Total_Sales = sum(Total.Sales, na.rm = TRUE))
 
-# Create a line graph for Total.Sales by Week
-ggplot(weekly_sales, aes(x = Week, y = Total_Sales)) +
-  geom_line(color = "blue", size = 1) +  # Line graph
-  geom_point(color = "red", size = 2) +  # Points for each week
-  labs(title = "Total Sales by Week",
-       x = "Week",
-       y = "Total Sales") +
-  theme_minimal()
+
+# Load necessary libraries for visualization
+library(tidyr)
+library(reshape2)
+library(ggplot2)
+
+# Create a list of products for each Order.ID
+product_list <- repeated_orders %>%
+  group_by(Order.ID) %>%
+  summarise(Products = list(unique(Product)), .groups = 'drop')  # Ensure Order.ID is retained
+
+# Expand the product list into pairs (each product will be paired with every other product in the same order)
+product_pairs <- product_list %>%
+  unnest(Products) %>%
+  group_by(Order.ID) %>%
+  summarise(Product = list(Products), .groups = 'drop') %>%
+  unnest(Product)
+
+# Create product pairs only when there are at least two products
+product_pairs <- product_pairs %>%
+  group_by(Order.ID) %>%
+  filter(length(Product) > 1) %>%
+  summarise(Product_Pairs = list(combn(Product, 2, simplify = FALSE)), .groups = 'drop') %>%
+  unnest(Product_Pairs)
+
+# Flatten the product pairs into a co-occurrence table
+co_occurrence <- product_pairs %>%
+  unnest_wider(Product_Pairs, names_sep = "_") %>%
+  count(Product_Pairs_1, Product_Pairs_2, name = "Frequency")
+
+# Create the heatmap using ggplot2 with counts displayed
+ggplot(co_occurrence, aes(Product_Pairs_1, Product_Pairs_2)) +
+  geom_tile(aes(fill = Frequency), color = "green") +
+  geom_text(aes(label = Frequency), color = "blue", size = 4) +  # Add counts as labels
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_minimal() +
+  labs(title = "Product Co-Occurrence Matrix",
+       x = "Products",
+       y = "Products",
+       fill = "Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
 
 
 
@@ -647,10 +668,9 @@ library(leaflet)
 library(tidygeocoder)
 library(dplyr)
 
-# Sample data for demonstration (replace this with your actual repeated_orders DataFrame)
 # Assuming repeated_orders DataFrame has Order.ID, City, and Total.Sales columns
 
-#  Aggregate sales data and count unique Order IDs by City
+# Step 1: Aggregate sales data and collect Order IDs by City
 city_sales_map <- repeated_orders %>%
   group_by(City) %>%
   summarise(
@@ -659,32 +679,23 @@ city_sales_map <- repeated_orders %>%
     .groups = 'drop'
   )
 
-#Geocode the City names to get latitude and longitude
+# Step 2: Geocode the City names to get latitude and longitude
 city_sales_map <- city_sales_map %>%
   geocode(City, method = 'osm')
 
 # Check the updated data frame
 str(city_sales_map)  # Verify the structure to ensure lat/lon exist
 
-# Create a color palette for Total_Sales
-pal <- colorNumeric(palette = "Blues", domain = city_sales_map$Total_Sales)
-
-# Create the leaflet map
+# Step 3: Create the leaflet map
 leaflet(city_sales_map) %>%
   addTiles() %>%
-  addCircleMarkers(
-    lng = ~long, lat = ~lat,  # Ensure these match your actual column names
-    radius = ~Order_Count * 2,  # Adjust radius based on number of orders
+  addMarkers(
+    lng = ~long, lat = ~lat,
+    icon = makeIcon(
+      iconUrl = "https://img.icons8.com/ios-filled/50/000000/star.png",  # Star icon
+      iconWidth = 30, iconHeight = 30  # Adjust the size of the icon
+    ),
     popup = ~paste("City:", City,
-                   "<br>Total Sales: $", Total_Sales,
-                   "<br>Number of Orders:", Order_Count),
-    color = ~pal(Total_Sales), fillOpacity = 0.7
-  ) %>%
-  addLegend("bottomright", 
-            title = "Total Sales by City", 
-            pal = pal, 
-            values = city_sales_map$Total_Sales,
-            labFormat = labelFormat(prefix = "$"), 
-            opacity = 1)
-
-
+                   "<br>Total Sales: $", format(Total_Sales, big.mark = ","), 
+                   "<br>Number of Orders:", Order_Count)
+  )
